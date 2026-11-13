@@ -71,47 +71,17 @@ jobs:
             tags = { Name = "K8s-Edge-Orchestrator-Node" }
           }
 
-          resource "aws_cloudfront_distribution" "k8s_edge_cdn" {
-            enabled = true
-            comment = "Edge Layer for Kubernetes Cluster"
-            origin {
-              domain_name = aws_instance.k8s_master_node.public_dns
-              origin_id   = "k8s-origin"
-              custom_origin_config {
-                http_port              = 30080
-                https_port             = 443
-                origin_protocol_policy = "http-only"
-                origin_ssl_protocols   = ["TLSv1.2"]
-              }
-            }
-            default_cache_behavior {
-              allowed_methods        = ["GET", "HEAD"]
-              cached_methods         = ["GET", "HEAD"]
-              target_origin_id       = "k8s-origin"
-              viewer_protocol_policy = "redirect-to-https"
-              forwarded_values {
-                query_string = false
-                cookies { forward = "none" }
-              }
-            }
-            restrictions {
-              geo_restriction { restriction_type = "none" }
-            }
-            viewer_certificate {
-              cloudfront_default_certificate = true
-            }
+          output "kubernetes_cluster_node_ip" {
+            value = aws_instance.k8s_master_node.public_ip
           }
 
-          output "direct_kubernetes_url" {
+          output "live_kubernetes_app_url" {
             value = "http://${aws_instance.k8s_master_node.public_ip}:30080"
-          }
-          output "global_edge_https_url" {
-            value = "https://${aws_cloudfront_distribution.k8s_edge_cdn.domain_name}"
           }
           EOF
           sed -i "s|REPLACE_USER_DATA|$USER_DATA_B64|g" main.tf
 
-      - name: Provision AWS, Kubernetes & Edge CDN
+      - name: Provision AWS & Kubernetes Cluster
         run: |
           terraform init
           terraform apply -auto-approve
