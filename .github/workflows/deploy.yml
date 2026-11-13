@@ -2,7 +2,6 @@ name: Cloud-to-Edge Kubernetes Orchestrator
 
 on:
   push:
-    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -19,22 +18,19 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
-      - name: Generate Infrastructure Configuration
+      - name: Create Terraform Config
         run: |
-          cat << 'EOF' > main.tf
+          python3 -c '
+          code = """
           terraform {
             required_providers {
-              aws = {
-                source  = "hashicorp/aws"
-                version = "~> 5.0"
-              }
+              aws = { source = "hashicorp/aws", version = "~> 5.0" }
             }
           }
-
-          provider "aws" {
-            region = "us-east-1"
-          }
+          provider "aws" { region = "us-east-1" }
 
           resource "aws_security_group" "k8s_edge_sg" {
             name = "k8s-edge-orchestrator-sg"
@@ -71,23 +67,13 @@ jobs:
             ami                    = data.aws_ami.ubuntu.id
             instance_type          = "t3.micro"
             vpc_security_group_ids = [aws_security_group.k8s_edge_sg.id]
-
-            user_data = <<-USERDATA
-                        #!/bin/bash
-                        curl -sfL https://k3s.io | sh -
-                        sleep 20
-                        kubectl create deployment edge-web-app --image=nginxdemos/hello:latest --replicas=2
-                        kubectl expose deployment edge-web-app --type=NodePort --port=80 --target-port=80
-                        kubectl patch svc edge-web-app -p '{"spec":{"ports":[{"port":80,"nodePort":30080}]}}'
-                        USERDATA
-
+            user_data = "#!/bin/bash\\ncurl -sfL https://k3s.io | sh -\\nsleep 20\\nkubectl create deployment edge-web-app --image=nginxdemos/hello:latest --replicas=2\\nkubectl expose deployment edge-web-app --type=NodePort --port=80 --target-port=80\\nkubectl patch svc edge-web-app -p '\''{\"spec\":{\"ports\":[{\"port\":80,\"nodePort\":30080}]}}'\''\\n"
             tags = { Name = "K8s-Edge-Orchestrator-Node" }
           }
 
           resource "aws_cloudfront_distribution" "k8s_edge_cdn" {
             enabled = true
             comment = "Edge Layer for Kubernetes Cluster"
-
             origin {
               domain_name = aws_instance.k8s_master_node.public_dns
               origin_id   = "k8s-origin"
@@ -98,7 +84,6 @@ jobs:
                 origin_ssl_protocols   = ["TLSv1.2"]
               }
             }
-
             default_cache_behavior {
               allowed_methods        = ["GET", "HEAD"]
               cached_methods         = ["GET", "HEAD"]
@@ -109,11 +94,9 @@ jobs:
                 cookies { forward = "none" }
               }
             }
-
             restrictions {
               geo_restriction { restriction_type = "none" }
             }
-
             viewer_certificate {
               cloudfront_default_certificate = true
             }
@@ -122,11 +105,13 @@ jobs:
           output "direct_kubernetes_url" {
             value = "http://${aws_instance.k8s_master_node.public_ip}:30080"
           }
-
           output "global_edge_https_url" {
             value = "https://${aws_cloudfront_distribution.k8s_edge_cdn.domain_name}"
           }
-          EOF
+          """
+          open("main.tf", "w").write(code)
+          '
+          ls -la main.tf
 
       - name: Provision AWS, Kubernetes & Edge CDN
         run: |
