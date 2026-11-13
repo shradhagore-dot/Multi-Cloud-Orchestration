@@ -23,7 +23,50 @@ jobs:
 
       - name: Create Terraform Config
         run: |
-          USER_DATA_B64=$(printf '#!/bin/bash\ncurl -sfL https://k3s.io | sh -\nsleep 20\nkubectl create deployment edge-web-app --image=nginxdemos/hello:latest --replicas=2\nkubectl expose deployment edge-web-app --type=NodePort --port=80 --target-port=80\nkubectl patch svc edge-web-app -p '\''{"spec":{"ports":[{"port":80,"nodePort":30080}]}}'\''\n' | base64 -w 0)
+          cat << 'SCRIPT' > startup.sh
+          #!/bin/bash
+          apt-get update -y
+          apt-get install -y nginx docker.io
+          systemctl start nginx docker
+          systemctl enable nginx docker
+
+          cat << 'HTML' > /var/www/html/index.html
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Multi-Cloud Kubernetes Orchestrator</title>
+            <style>
+              body { font-family: Arial, sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding: 50px; }
+              .card { background: #1e293b; border-radius: 12px; padding: 30px; max-width: 650px; margin: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
+              h1 { color: #38bdf8; }
+              .badge { background: #22c55e; color: #052e16; padding: 6px 14px; border-radius: 20px; font-weight: bold; display: inline-block; margin: 10px 0; }
+              .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 25px; text-align: left; }
+              .box { background: #334155; padding: 15px; border-radius: 8px; }
+              .label { font-size: 12px; color: #94a3b8; }
+              .val { font-size: 16px; font-weight: bold; color: #e2e8f0; margin-top: 4px; }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <h1>Multi-Cloud DevOps Orchestrator</h1>
+              <div class="badge">● SYSTEM ONLINE & ORCHESTRATED</div>
+              <p>Automated Infrastructure Provisioning via Terraform, GitHub Actions, AWS & Kubernetes</p>
+              <div class="grid">
+                <div class="box"><div class="label">CLOUD PROVIDER</div><div class="val">AWS (us-east-1)</div></div>
+                <div class="box"><div class="label">ORCHESTRATOR</div><div class="val">Kubernetes (K3s) & Docker</div></div>
+                <div class="box"><div class="label">IAC ENGINE</div><div class="val">Terraform v1.x</div></div>
+                <div class="box"><div class="label">CI/CD PIPELINE</div><div class="val">GitHub Actions (Automated)</div></div>
+              </div>
+            </div>
+          </body>
+          </html>
+          HTML
+
+          curl -sfL https://k3s.io | sh -
+          SCRIPT
+
+          USER_DATA_B64=$(base64 -w 0 startup.sh)
+
           cat << 'EOF' > main.tf
           terraform {
             required_providers {
@@ -35,14 +78,14 @@ jobs:
           resource "aws_security_group" "k8s_edge_sg" {
             name_prefix = "k8s-edge-orchestrator-"
             ingress {
-              from_port   = 30080
-              to_port     = 30080
+              from_port   = 80
+              to_port     = 80
               protocol    = "tcp"
               cidr_blocks = ["0.0.0.0/0"]
             }
             ingress {
-              from_port   = 80
-              to_port     = 80
+              from_port   = 30080
+              to_port     = 30080
               protocol    = "tcp"
               cidr_blocks = ["0.0.0.0/0"]
             }
@@ -71,12 +114,8 @@ jobs:
             tags = { Name = "K8s-Edge-Orchestrator-Node" }
           }
 
-          output "kubernetes_cluster_node_ip" {
-            value = aws_instance.k8s_master_node.public_ip
-          }
-
-          output "live_kubernetes_app_url" {
-            value = "http://${aws_instance.k8s_master_node.public_ip}:30080"
+          output "live_frontend_dashboard_url" {
+            value = "http://${aws_instance.k8s_master_node.public_ip}"
           }
           EOF
           sed -i "s|REPLACE_USER_DATA|$USER_DATA_B64|g" main.tf
