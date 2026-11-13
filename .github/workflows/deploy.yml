@@ -33,7 +33,7 @@ jobs:
           provider "aws" { region = "us-east-1" }
 
           resource "aws_security_group" "k8s_edge_sg" {
-            name = "k8s-edge-orchestrator-sg"
+            name_prefix = "k8s-edge-orchestrator-"
             ingress {
               from_port   = 30080
               to_port     = 30080
