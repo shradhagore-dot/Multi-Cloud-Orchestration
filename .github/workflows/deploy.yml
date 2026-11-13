@@ -23,8 +23,8 @@ jobs:
 
       - name: Create Terraform Config
         run: |
-          USER_DATA_B64=$(printf '#!/bin/bash\ncurl -sfL https://get.k3s.io | sh -\nsleep 20\nkubectl create deployment edge-web-app --image=nginxdemos/hello:latest --replicas=2\nkubectl expose deployment edge-web-app --type=NodePort --port=80 --target-port=80\nkubectl patch svc edge-web-app -p '\''{"spec":{"ports":[{"port":80,"nodePort":30080}]}}'\''\n' | base64 -w 0)
-          cat << EOF > main.tf
+          USER_DATA_B64=$(printf '#!/bin/bash\ncurl -sfL https://k3s.io | sh -\nsleep 20\nkubectl create deployment edge-web-app --image=nginxdemos/hello:latest --replicas=2\nkubectl expose deployment edge-web-app --type=NodePort --port=80 --target-port=80\nkubectl patch svc edge-web-app -p '\''{"spec":{"ports":[{"port":80,"nodePort":30080}]}}'\''\n' | base64 -w 0)
+          cat << 'EOF' > main.tf
           terraform {
             required_providers {
               aws = { source = "hashicorp/aws", version = "~> 5.0" }
@@ -67,7 +67,7 @@ jobs:
             ami                    = data.aws_ami.ubuntu.id
             instance_type          = "t3.micro"
             vpc_security_group_ids = [aws_security_group.k8s_edge_sg.id]
-            user_data_base64       = "${USER_DATA_B64}"
+            user_data_base64       = "REPLACE_USER_DATA"
             tags = { Name = "K8s-Edge-Orchestrator-Node" }
           }
 
@@ -109,6 +109,7 @@ jobs:
             value = "https://${aws_cloudfront_distribution.k8s_edge_cdn.domain_name}"
           }
           EOF
+          sed -i "s|REPLACE_USER_DATA|$USER_DATA_B64|g" main.tf
 
       - name: Provision AWS, Kubernetes & Edge CDN
         run: |
